@@ -13,6 +13,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 
 from sorting_interfaces.msg import DetectedObject
 from sorting_interfaces.action import SortObject
+from geometry_msgs.msg import Pose, Quaternion, Point
 
 
 class PickPlaceNode(Node):
@@ -56,6 +57,65 @@ class PickPlaceNode(Node):
             execute_callback=self.execute_callback,
             callback_group=self.callback_group,
         )
+
+
+    # Helper functions
+    def get_bin_pose(self, color_label: str) -> Pose | None:
+        """
+        A helper function which converts bin's color label to corresponding pose
+        """
+
+        # Create the bin map to map color to values
+        bin_map = {
+            'red':   self.get_parameter('red_bin_pose').value,
+            'green': self.get_parameter('green_bin_pose').value,
+            'blue':  self.get_parameter('blue_bin_pose').value,
+        }
+
+        # Read the corresponding color from the bin map to access it's position (Point message type)
+        point = bin_map.get(color_label)
+
+        # Check the mapping for point of given color exists
+        if point is None:
+            return None
+
+        # Create the Pose (Point + Quaternion) message to return after field filling
+        pose = Pose()
+        pose.position = Point(x=float(point[0]), y=float(point[1]), z=float(point[2]))
+        pose.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)   # identity
+
+        return pose
+    
+    
+    # Execute callback
+    async def execute_callback(self, goal_handle):
+        """
+        A callback that executes the client request via action server.s
+        """
+
+        # Take goal based on goal handle request
+        goal = goal_handle.request
+        color_label = goal.color_label
+        object_pose = goal.object_pose
+
+        # Find the bin pose
+        bin_pose = self.get_bin_pose(color_label)
+        if bin_pose is None:
+            goal_handle.abort()
+            result = SortObject.Result()
+            result.success = False
+            result.message = f"Unknown color label: {color_label}"
+            return result
+
+        # TODO Sequence
+        # ...
+
+        # Return the result
+        goal_handle.succeed()
+        result = SortObject.Result()
+        result.success = True
+        result.message = f"Sorted {color_label} object successfully"
+        return result
 
 
 # Main function to simulate node lifecycle

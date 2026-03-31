@@ -203,6 +203,15 @@ class ColorDetectorNode(Node):
                 continue
             self.tracked_positions.append(position)
 
+            # Publish DetectedObject message for debug before sending goal
+            debug_msg = DetectedObject()
+            debug_msg.header.stamp = self.get_clock().now().to_msg()
+            debug_msg.header.frame_id = 'base_link'
+            debug_msg.color_label = color
+            debug_msg.position = position
+            debug_msg.confidence = confidence
+            self.det_obj_pub.publish(debug_msg)
+
             # Send goal to action
             self.send_goal(color_label=color, object_pose=position)
 
