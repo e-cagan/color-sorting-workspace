@@ -7,6 +7,8 @@ import cv2
 
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
+from rclpy.duration import Duration
 from rclpy.action import ActionClient
 
 from cv_bridge import CvBridge
@@ -16,7 +18,7 @@ from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_point
 from sorting_interfaces.msg import DetectedObject
 from sorting_interfaces.action import SortObject
 from sensor_msgs.msg import CameraInfo, Image
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, PointStamped
 
 
 # COLOR RANGES
@@ -39,11 +41,15 @@ class ColorDetectorNode(Node):
         self.declare_parameter('rgb_topic', '/camera/image_raw')
         self.declare_parameter('depth_topic', '/camera/depth/image_raw')
         self.declare_parameter('camera_info_topic', '/camera/camera_info')
+        self.declare_parameter('camera_frame', 'camera_link')
         self.declare_parameter('pixel_threshold', 400)
+        self.declare_parameter('depth_scale', 1.0)
         self.rgb_topic = self.get_parameter('rgb_topic').value
         self.depth_topic = self.get_parameter('depth_topic').value
         self.camera_info_topic = self.get_parameter('camera_info_topic').value
+        self.camera_frame = self.get_parameter('camera_frame').value
         self.pixel_threshold = self.get_parameter('pixel_threshold').value
+        self.depth_scale = self.get_parameter('depth_scale').value
 
         # Action client
         self.sort_action_cli = ActionClient(self, SortObject, 'sort_objects')
@@ -188,12 +194,45 @@ class ColorDetectorNode(Node):
         return detections
 
 
-    def get_3d_position(self, point):
+    def get_3d_position(self, centroid_2d: tuple, depth_frame: np.ndarray) -> PointStamped | None:
         """
         A function which gets the 3D position of a point.
         """
 
-        pass
+        # Take fx, fy, cx and cy from camera matrix and take u and v to calculate X and Y for transformations
+        fx, fy = self.cam_matrix[0][0], self.cam_matrix[1][1]
+        cx, cy = self.cam_matrix[0][2], self.cam_matrix[1][2]
+        u, v = centroid_2d
+
+        # Calculate Z and scale Z. Also check if it's valid
+        Z = depth_frame[int(v), int(u)] * self.depth_scale
+        if Z <= 0 or np.isnan(Z):
+            return None
+
+        # Calculate X and Y
+        X = (u - cx) * Z / fx
+        Y = (v - cy) * Z / fy
+
+        # Create PointStamped message to conduct transformation between frames
+        point_stamped = PointStamped()
+        point_stamped.header.frame_id = self.camera_frame
+        point_stamped.header.stamp = self.get_clock().now().to_msg()
+        point_stamped.point.x = X
+        point_stamped.point.y = Y
+        point_stamped.point.z = Z
+
+        # Transform between frames
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                target_frame='base_link', source_frame=self.camera_frame,
+                time=Time(), timeout=Duration(seconds=0.1)
+            )
+            point_in_base = do_transform_point(point=point_stamped, transform=transform)
+        except Exception as e:
+            self.get_logger().warn(f"TF lookup failed: {e}")
+            return None
+        
+        return point_in_base
 
 
     def is_duplicate(self, position):
