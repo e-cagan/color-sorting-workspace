@@ -1,0 +1,10 @@
+# Goal
+string color_label
+geometry_msgs/Pose object_pose
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string status    # "moving_to_object" | "grasping" | "moving_to_bin" | "placing"
