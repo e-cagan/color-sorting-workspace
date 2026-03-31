@@ -45,6 +45,7 @@ class ColorDetectorNode(Node):
         self.declare_parameter('camera_frame', 'camera_link')
         self.declare_parameter('pixel_threshold', 400)
         self.declare_parameter('dedup_threshold', 0.05)
+        self.declare_parameter('min_confidence', 0.5)
         self.declare_parameter('depth_scale', 1.0)
         self.rgb_topic = self.get_parameter('rgb_topic').value
         self.depth_topic = self.get_parameter('depth_topic').value
@@ -53,6 +54,7 @@ class ColorDetectorNode(Node):
         self.pixel_threshold = self.get_parameter('pixel_threshold').value
         self.dedup_threshold = self.get_parameter('dedup_threshold').value
         self.depth_scale = self.get_parameter('depth_scale').value
+        self.min_confidence = self.get_parameter('min_confidence').value
 
         # Action client
         self.sort_action_cli = ActionClient(self, SortObject, 'sort_objects')
@@ -191,6 +193,10 @@ class ColorDetectorNode(Node):
             position = self.get_3d_position(centroid_2d=centroid_2d, depth_frame=depth_frame)
             if position is None:
                 continue
+
+            # Check if the confidence is lower than minimum confidence threshold
+            if confidence < self.min_confidence:
+                continue
                 
             # Check the detection is duplicate
             if self.is_duplicate(position=position):
@@ -200,6 +206,7 @@ class ColorDetectorNode(Node):
             # Send goal to action
             self.send_goal(color_label=color, object_pose=position)
 
+    
     # Color detection pipeline
     def detect_color(self, hsv_img) -> list[tuple[str, tuple, float]]:
         """
