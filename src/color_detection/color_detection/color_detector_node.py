@@ -43,12 +43,14 @@ class ColorDetectorNode(Node):
         self.declare_parameter('camera_info_topic', '/camera/camera_info')
         self.declare_parameter('camera_frame', 'camera_link')
         self.declare_parameter('pixel_threshold', 400)
+        self.declare_parameter('dedup_threshold', 0.05)
         self.declare_parameter('depth_scale', 1.0)
         self.rgb_topic = self.get_parameter('rgb_topic').value
         self.depth_topic = self.get_parameter('depth_topic').value
         self.camera_info_topic = self.get_parameter('camera_info_topic').value
         self.camera_frame = self.get_parameter('camera_frame').value
         self.pixel_threshold = self.get_parameter('pixel_threshold').value
+        self.dedup_threshold = self.get_parameter('dedup_threshold').value
         self.depth_scale = self.get_parameter('depth_scale').value
 
         # Action client
@@ -194,7 +196,7 @@ class ColorDetectorNode(Node):
         return detections
 
 
-    def get_3d_position(self, centroid_2d: tuple, depth_frame: np.ndarray) -> PointStamped | None:
+    def get_3d_position(self, centroid_2d: tuple, depth_frame: np.ndarray) -> Point | None:
         """
         A function which gets the 3D position of a point.
         """
@@ -232,15 +234,22 @@ class ColorDetectorNode(Node):
             self.get_logger().warn(f"TF lookup failed: {e}")
             return None
         
-        return point_in_base
+        return point_in_base.point
 
 
-    def is_duplicate(self, position):
+    def is_duplicate(self, position: Point) -> bool:
         """
         A function which checks the detection is duplicate to avoid redundancy.
         """
 
-        pass
+        # Iterate trough the tracked positions to estimate distance
+        for tracked in self.tracked_positions:
+            # Calculate eucladian distance and check if the distance is less than or equal to dedup threshold
+            distance = np.sqrt((position.x - tracked.x)**2 + (position.y - tracked.y)**2 + (position.z - tracked.z)**2)
+            if distance <= self.dedup_threshold:
+                return True
+            
+        return False
 
 
 # Main function to simulate node lifecycle
