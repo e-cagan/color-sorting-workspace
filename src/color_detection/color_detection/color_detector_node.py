@@ -8,6 +8,7 @@ import cv2
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
+from rclpy.task import Future
 from rclpy.duration import Duration
 from rclpy.action import ActionClient
 
@@ -18,7 +19,7 @@ from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_point
 from sorting_interfaces.msg import DetectedObject
 from sorting_interfaces.action import SortObject
 from sensor_msgs.msg import CameraInfo, Image
-from geometry_msgs.msg import Point, PointStamped
+from geometry_msgs.msg import Point, PointStamped, Pose, Quaternion
 
 
 # COLOR RANGES
@@ -92,6 +93,76 @@ class ColorDetectorNode(Node):
         self.dist_coeffs = np.array(msg.d)
 
     
+    # Send goal function
+    def send_goal(self, color_label: str, object_pose: Point) -> Future | None:
+        """
+        A function that sends goal to action server.
+        """
+        
+        goal_msg = SortObject.Goal()
+        
+        # Convert object pose to an actual Pose (Point + Quaternion) instead of Point
+        pose = Pose()
+        pose.position = object_pose
+        pose.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)  # identity
+        goal_msg.color_label = color_label
+        goal_msg.object_pose = pose
+
+        if not self.sort_action_cli.wait_for_server(timeout_sec=0.0):
+            self.get_logger().warn("Action server not available, skipping.")
+            return None
+        
+        future = self.sort_action_cli.send_goal_async(
+            goal_msg,
+            feedback_callback=self.feedback_callback
+        )
+        future.add_done_callback(
+            lambda f, pos=object_pose: self.goal_response_callback(f, pos)
+        )
+
+        return future
+    
+    
+    # Goal response callback
+    def goal_response_callback(self, future: Future, position: Point) -> None:
+        """
+        A callback that takes goal response.
+        """
+        
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().warn("Goal rejected")
+            # Remove even if got rejected
+            self.tracked_positions.remove(position)
+            return
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(
+            lambda f, pos=position: self.result_callback(f, pos)
+        )
+
+    
+    # Result callback
+    def result_callback(self, future: Future, position: Point) -> None:
+        """
+        A callback that takes the result and removes the result in detections if result is in it.
+        """
+        
+        result = future.result().result
+        self.get_logger().info(f"Sort result: {result.message}")
+        if position in self.tracked_positions:
+            self.tracked_positions.remove(position)
+
+    
+    # Feedback callback
+    def feedback_callback(self, feedback_msg) -> None:
+        """
+        A callback that logs the action feedback.
+        """
+        
+        feedback = feedback_msg.feedback
+        self.get_logger().debug(f"Feedback: {feedback.status}")
+
+
     # Image callback
     def image_callback(self, rgb_msg, depth_msg):
         """
@@ -112,10 +183,22 @@ class ColorDetectorNode(Node):
         hsv_frame = cv2.cvtColor(src=rgb_frame, code=cv2.COLOR_BGR2HSV)
 
         # Take the detections
-        rgb_detections = self.detect_color(hsv_frame)
+        hsv_detections = self.detect_color(hsv_frame)
 
+        # Iterate trough detections
+        for color, centroid_2d, confidence in hsv_detections:
+            # Take the position of detection and check if it's none
+            position = self.get_3d_position(centroid_2d=centroid_2d, depth_frame=depth_frame)
+            if position is None:
+                continue
+                
+            # Check the detection is duplicate
+            if self.is_duplicate(position=position):
+                continue
+            self.tracked_positions.append(position)
 
-    
+            # Send goal to action
+            self.send_goal(color_label=color, object_pose=position)
 
     # Color detection pipeline
     def detect_color(self, hsv_img) -> list[tuple[str, tuple, float]]:
@@ -196,6 +279,7 @@ class ColorDetectorNode(Node):
         return detections
 
 
+    # 3D position obtainer function
     def get_3d_position(self, centroid_2d: tuple, depth_frame: np.ndarray) -> Point | None:
         """
         A function which gets the 3D position of a point.
@@ -237,6 +321,7 @@ class ColorDetectorNode(Node):
         return point_in_base.point
 
 
+    # Is duplicate function
     def is_duplicate(self, position: Point) -> bool:
         """
         A function which checks the detection is duplicate to avoid redundancy.
