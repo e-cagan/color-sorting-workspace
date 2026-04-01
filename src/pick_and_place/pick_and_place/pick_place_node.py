@@ -77,6 +77,8 @@ class PickPlaceNode(Node):
             callback_group=self.callback_group,
         )
 
+        self.get_logger().info("Color detector node started.")
+        
 
     # Helper functions
     def get_bin_pose(self, color_label: str) -> Pose | None:
