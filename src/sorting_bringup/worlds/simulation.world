@@ -1,0 +1,199 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="sorting_world">
+
+    <!-- Physics and Lighting -->
+    <gravity>0 0 -9.8</gravity>
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!-- Table -->
+    <model name="table">
+      <static>true</static>
+      <link name="table_link">
+        <collision name="table_collision">
+          <geometry>
+            <box><size>1.2 1.0 0.02</size></box>
+          </geometry>
+        </collision>
+        <visual name="table_visual">
+          <geometry>
+            <box><size>1.2 1.0 0.02</size></box>
+          </geometry>
+          <material>
+            <ambient>0.6 0.4 0.2 1</ambient>
+            <diffuse>0.6 0.4 0.2 1</diffuse>
+          </material>
+        </visual>
+        <pose>0.5 0.0 -0.01 0 0 0</pose>
+      </link>
+    </model>
+
+    <!-- ===== OBJECTS ===== -->
+
+    <!-- Red object (cylinder) -->
+    <model name="red_object">
+      <pose>0.45 -0.15 0.025 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.05</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.05</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+          </material>
+        </visual>
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.0001</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+      </link>
+    </model>
+
+    <!-- Green object (cylinder) -->
+    <model name="green_object">
+      <pose>0.45 0.0 0.025 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.05</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.05</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0 1 0 1</ambient>
+            <diffuse>0 1 0 1</diffuse>
+          </material>
+        </visual>
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.0001</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+      </link>
+    </model>
+
+    <!-- Blue object (cylinder) -->
+    <model name="blue_object">
+      <pose>0.45 0.15 0.025 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.05</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.05</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0 0 1 1</ambient>
+            <diffuse>0 0 1 1</diffuse>
+          </material>
+        </visual>
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.0001</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+      </link>
+    </model>
+
+    <!-- ===== BINS ===== -->
+    <!-- Every box is 4 wall + base, opened box -->
+    <!-- We use only solid box for simplicity, it's sufficient for pick&place test -->
+
+    <!-- Red bin -->
+    <model name="red_bin">
+      <static>true</static>
+      <pose>0.75 -0.25 0.05 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.2 0.2 0.1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.2 0.2 0.1</size></box>
+          </geometry>
+          <material>
+            <ambient>0.8 0 0 0.5</ambient>
+            <diffuse>0.8 0 0 0.5</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Green bin -->
+    <model name="green_bin">
+      <static>true</static>
+      <pose>0.75 0.0 0.05 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.2 0.2 0.1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.2 0.2 0.1</size></box>
+          </geometry>
+          <material>
+            <ambient>0 0.8 0 0.5</ambient>
+            <diffuse>0 0.8 0 0.5</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Blue bin -->
+    <model name="blue_bin">
+      <static>true</static>
+      <pose>0.75 0.25 0.05 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.2 0.2 0.1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.2 0.2 0.1</size></box>
+          </geometry>
+          <material>
+            <ambient>0 0 0.8 0.5</ambient>
+            <diffuse>0 0 0.8 0.5</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

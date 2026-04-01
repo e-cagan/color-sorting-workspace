@@ -1,0 +1,12 @@
+pick_place_node:
+  ros__parameters:
+    planning_group: 'panda_arm'
+    end_effector_frame: 'panda_hand'
+    grasp_offset: 0.12
+    place_offset: 0.12
+    velocity_scaling: 0.3
+    acceleration_scaling: 0.3
+    # z = 0.1 (right above the box)
+    red_bin_pose:   [0.75, -0.25, 0.1]
+    green_bin_pose: [0.75,  0.0,  0.1]
+    blue_bin_pose:  [0.75,  0.25, 0.1]

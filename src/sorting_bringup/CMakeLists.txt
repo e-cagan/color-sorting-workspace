@@ -22,9 +22,12 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-# Add launch directory
+# Add launch, config, urdf and worlds directory to the package
 install(DIRECTORY
   launch
+  config
+  urdf
+  worlds
   DESTINATION share/${PROJECT_NAME}
 )
 
