@@ -53,18 +53,17 @@ class PickPlaceNode(Node):
             node=self,
             joint_names=panda_robot.joint_names(),
             base_link_name=panda_robot.base_link_name(),
-            end_effector_name=panda_robot.end_effector_name(),
-            group_name=self.planning_group,  # 'panda_arm'
+            end_effector_name='panda_hand',  # panda_robot.end_effector_name() değil
+            group_name=self.planning_group,
             callback_group=self.callback_group,
         )
 
-        ## Hand instance — controls the 2-finger gripper group
         self.hand = MoveIt2(
             node=self,
             joint_names=['panda_finger_joint1', 'panda_finger_joint2'],
             base_link_name=panda_robot.base_link_name(),
-            end_effector_name=panda_robot.end_effector_name(),
-            group_name=self.end_effector_frame,  # 'panda_hand'
+            end_effector_name='panda_hand',
+            group_name=self.end_effector_frame,
             callback_group=self.callback_group,
         )
 
@@ -127,9 +126,10 @@ class PickPlaceNode(Node):
         pre_grasp_pose.position.z += self.grasp_offset
 
         # Open the gripper before approaching (0.04 m = fully open for Panda)
-        self.hand.move_to_configuration([0.04, 0.04])
-        self.hand.wait_until_executed()
-        await asyncio.sleep(0)
+        # TODO: re-enable after fixing panda_hand OMPL config
+        # self.hand.move_to_configuration([0.04, 0.04])
+        # self.hand.wait_until_executed()
+        # await asyncio.sleep(0)
 
         # Move the arm above the object
         self.arm.move_to_pose(
@@ -159,9 +159,10 @@ class PickPlaceNode(Node):
 
         # Close the fingers around the object
         # Not fully closed (0.0) to avoid crushing the object and destabilizing planning
-        self.hand.move_to_configuration([0.01, 0.01])
-        self.hand.wait_until_executed()
-        await asyncio.sleep(0)
+        # TODO: re-enable after fixing panda_hand OMPL config
+        # self.hand.move_to_configuration([0.04, 0.04])
+        # self.hand.wait_until_executed()
+        # await asyncio.sleep(0)
 
         # TODO: Add an Attach collision object call here to prevent the object
         # from slipping during transport in simulation

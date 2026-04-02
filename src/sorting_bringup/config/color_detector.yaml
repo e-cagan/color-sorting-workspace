@@ -3,6 +3,7 @@ color_detector_node:
     rgb_topic: '/camera/color/image_raw'
     depth_topic: '/camera/depth/image_rect_raw'
     camera_info_topic: '/camera/color/camera_info'
+    base_frame: 'panda_link0'
     camera_frame: 'camera_color_optical_frame'
     pixel_threshold: 400
     dedup_threshold: 0.05

@@ -47,6 +47,8 @@ class ColorDetectorNode(Node):
         self.declare_parameter('dedup_threshold', 0.05)
         self.declare_parameter('min_confidence', 0.5)
         self.declare_parameter('depth_scale', 1.0)
+        self.declare_parameter('base_frame', 'panda_link0')
+        self.base_frame = self.get_parameter('base_frame').value
         self.rgb_topic = self.get_parameter('rgb_topic').value
         self.depth_topic = self.get_parameter('depth_topic').value
         self.camera_info_topic = self.get_parameter('camera_info_topic').value
@@ -326,7 +328,7 @@ class ColorDetectorNode(Node):
         # Transform between frames
         try:
             transform = self.tf_buffer.lookup_transform(
-                target_frame='base_link', source_frame=self.camera_frame,
+                target_frame=self.base_frame, source_frame=self.camera_frame,
                 time=Time(), timeout=Duration(seconds=0.1)
             )
             point_in_base = do_transform_point(point=point_stamped, transform=transform)
