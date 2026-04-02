@@ -9,10 +9,11 @@ from pymoveit2.robots import panda as panda_robot
 
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, ActionClient
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 
+from control_msgs.action import GripperCommand
 from sorting_interfaces.msg import DetectedObject
 from sorting_interfaces.action import SortObject
 from geometry_msgs.msg import Pose, Quaternion, Point
@@ -49,21 +50,14 @@ class PickPlaceNode(Node):
 
         # MoveIt2 instances
         ## Arm instance — controls the 7-DOF panda arm group
-        self.arm = MoveIt2(
-            node=self,
-            joint_names=panda_robot.joint_names(),
-            base_link_name=panda_robot.base_link_name(),
-            end_effector_name='panda_hand',  # panda_robot.end_effector_name() değil
-            group_name=self.planning_group,
-            callback_group=self.callback_group,
-        )
+        ## It will be initialized in main
+        self.arm = None
 
-        self.hand = MoveIt2(
-            node=self,
-            joint_names=['panda_finger_joint1', 'panda_finger_joint2'],
-            base_link_name=panda_robot.base_link_name(),
-            end_effector_name='panda_hand',
-            group_name=self.end_effector_frame,
+        ## Action client for hand and gripper to avoid redundant ompl config
+        self.gripper_client = ActionClient(
+            self,
+            GripperCommand,
+            '/panda_hand_controller/gripper_cmd',
             callback_group=self.callback_group,
         )
 
@@ -104,6 +98,23 @@ class PickPlaceNode(Node):
         pose.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)  # identity quaternion
 
         return pose
+    
+
+    def init_arm(self, executor):
+        """
+        A function that initializes arm to avoid executor conflict.
+        """
+        
+        self.arm = MoveIt2(
+            node=self,
+            joint_names=panda_robot.joint_names(),
+            base_link_name=panda_robot.base_link_name(),
+            end_effector_name='panda_hand',
+            group_name=self.planning_group,
+            callback_group=self.callback_group,
+            execute_via_moveit=True,
+        )
+        self.arm.executor = executor
 
 
     def publish_feedback(self, goal_handle, status_msg: str) -> None:
@@ -126,10 +137,8 @@ class PickPlaceNode(Node):
         pre_grasp_pose.position.z += self.grasp_offset
 
         # Open the gripper before approaching (0.04 m = fully open for Panda)
-        # TODO: re-enable after fixing panda_hand OMPL config
-        # self.hand.move_to_configuration([0.04, 0.04])
-        # self.hand.wait_until_executed()
-        # await asyncio.sleep(0)
+        await self.move_gripper(0.04)   # Open gripper before approaching
+        await asyncio.sleep(0)
 
         # Move the arm above the object
         self.arm.move_to_pose(
@@ -159,10 +168,8 @@ class PickPlaceNode(Node):
 
         # Close the fingers around the object
         # Not fully closed (0.0) to avoid crushing the object and destabilizing planning
-        # TODO: re-enable after fixing panda_hand OMPL config
-        # self.hand.move_to_configuration([0.04, 0.04])
-        # self.hand.wait_until_executed()
-        # await asyncio.sleep(0)
+        await self.move_gripper(0.01)   # Close gripper around object
+        await asyncio.sleep(0)
 
         # TODO: Add an Attach collision object call here to prevent the object
         # from slipping during transport in simulation
@@ -216,8 +223,7 @@ class PickPlaceNode(Node):
         await asyncio.sleep(0)
 
         # Open the gripper fully to drop the object into the bin
-        self.hand.move_to_configuration([0.04, 0.04])
-        self.hand.wait_until_executed()
+        await self.move_gripper(0.04)   # Open gripper
         await asyncio.sleep(0)
 
         # TODO: Add a Detach collision object call here
@@ -237,6 +243,28 @@ class PickPlaceNode(Node):
         )
         self.arm.wait_until_executed()
         await asyncio.sleep(0)
+
+    
+    async def move_gripper(self, position: float) -> None:
+        """
+        Sends a GripperCommand goal.
+        position: 0.0 = fully closed, 0.04 = fully open (metres per finger)
+        """
+        
+        goal = GripperCommand.Goal()
+        goal.command.position = position
+        goal.command.max_effort = 50.0
+
+        if not self.gripper_client.wait_for_server(timeout_sec=2.0):
+            self.get_logger().warn("Gripper action server not available")
+            return
+
+        goal_handle = await self.gripper_client.send_goal_async(goal)
+        if not goal_handle.accepted:
+            self.get_logger().warn("Gripper goal rejected")
+            return
+
+        await goal_handle.get_result_async()
 
 
     # Execute callback
@@ -292,9 +320,10 @@ def main(args=None):
 
     rclpy.init(args=args)
     node = PickPlaceNode()
-
+    
     executor = MultiThreadedExecutor()
     executor.add_node(node)
+    node.init_arm(executor)  # executor hazır olduktan sonra
 
     try:
         executor.spin()
