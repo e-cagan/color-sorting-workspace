@@ -23,7 +23,9 @@ def generate_launch_description():
             file_path=os.path.join(bringup_dir, 'urdf', 'panda_with_camera.urdf.xacro'),
             mappings={"ros2_control_hardware_type": "mock_components"},
         )
-        .robot_description_semantic(file_path="config/panda.srdf")
+        .robot_description_semantic(
+            file_path=os.path.join(bringup_dir, 'config', 'panda.srdf')
+        )
         .trajectory_execution(file_path="config/gripper_moveit_controllers.yaml")
         .planning_pipelines(pipelines=["ompl"])
         .to_moveit_configs()
@@ -114,8 +116,9 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        static_tf_node,
-        camera_tf_node,
+        # We don't need transform (tf) nodes because it's now defined in xacro file
+        # static_tf_node,
+        # camera_tf_node,
         robot_state_publisher,
         move_group_node,
         rviz_node,

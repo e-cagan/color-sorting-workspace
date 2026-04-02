@@ -1,53 +1,33 @@
 <?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda_with_camera">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
 
-  <!-- Include Panda base URDF -->
-  <xacro:include filename="$(find franka_description)/robots/panda/panda.urdf.xacro"/>
+  <xacro:arg name="ros2_control_hardware_type" default="mock_components"/>
+  <xacro:include filename="$(find moveit_resources_panda_moveit_config)/config/panda.urdf.xacro"/>
 
-  <!-- Kamera mount link and joint — Attached fixed to world -->
-  <link name="camera_mount"/>
+  <!-- World link — root of the entire tree -->
+  <link name="world"/>
 
-  <joint name="camera_mount_joint" type="fixed">
+  <!-- Connect world to panda base — replaces static_transform_publisher -->
+  <joint name="world_to_panda" type="fixed">
     <parent link="world"/>
-    <child link="camera_mount"/>
-    <!-- 1.2m above table, bird's eye view in front of the robot -->
-    <origin xyz="0.5 0.0 1.2" rpy="0.0 1.5708 0.0"/>
-  </joint>
-
-  <!-- Camera link and joint -->
-  <link name="camera_link"/>
-
-  <joint name="camera_joint" type="fixed">
-    <parent link="camera_mount"/>
-    <child link="camera_link"/>
+    <child link="panda_link0"/>
     <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
   </joint>
 
-  <!-- Gazebo camera plugin -->
-  <gazebo reference="camera_link">
-    <sensor type="depth" name="camera">
-      <update_rate>30</update_rate>
-      <camera>
-        <horizontal_fov>1.047</horizontal_fov>
-        <image>
-          <width>640</width>
-          <height>480</height>
-          <format>R8G8B8</format>
-        </image>
-        <clip>
-          <near>0.1</near>
-          <far>10.0</far>
-        </clip>
-      </camera>
-      <plugin name="camera_plugin" filename="libgazebo_ros_depth_camera.so">
-        <ros>
-          <remapping>~/image_raw:=/camera/color/image_raw</remapping>
-          <remapping>~/depth/image_raw:=/camera/depth/image_rect_raw</remapping>
-          <remapping>~/camera_info:=/camera/color/camera_info</remapping>
-        </ros>
-        <frame_name>camera_color_optical_frame</frame_name>
-      </plugin>
-    </sensor>
-  </gazebo>
+  <!-- Camera mount — bird's eye view above the table -->
+  <link name="camera_mount"/>
+  <joint name="camera_mount_joint" type="fixed">
+    <parent link="world"/>
+    <child link="camera_mount"/>
+    <origin xyz="0.5 0.0 1.2" rpy="0.0 1.5708 0.0"/>
+  </joint>
+
+  <!-- Camera optical frame -->
+  <link name="camera_color_optical_frame"/>
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_mount"/>
+    <child link="camera_color_optical_frame"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+  </joint>
 
 </robot>
