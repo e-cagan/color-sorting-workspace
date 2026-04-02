@@ -1,33 +1,85 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
 
-  <xacro:arg name="ros2_control_hardware_type" default="mock_components"/>
-  <xacro:include filename="$(find moveit_resources_panda_moveit_config)/config/panda.urdf.xacro"/>
+  <!-- Our custom ros2_control definition for Gazebo -->
+  <xacro:include filename="$(find sorting_bringup)/urdf/panda_gazebo.ros2_control.xacro"/>
+  <xacro:panda_gazebo_ros2_control name="PandaGazeboSystem"/>
 
-  <!-- World link — root of the entire tree -->
-  <link name="world"/>
+  <!-- Include franka_robot macro directly for full argument control -->
+  <xacro:include filename="$(find sorting_bringup)/urdf/franka/robots/common/franka_robot.xacro"/>
 
-  <!-- Connect world to panda base — replaces static_transform_publisher -->
-  <joint name="world_to_panda" type="fixed">
-    <parent link="world"/>
-    <child link="panda_link0"/>
-    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
-  </joint>
+  <!-- Call macro with Gazebo support, gripper, and world parent -->
+  <xacro:franka_robot arm_id="panda"
+    joint_limits="${xacro.load_yaml('$(find sorting_bringup)/urdf/franka/robots/panda/joint_limits.yaml')}"
+    hand="true"
+    gazebo="true"
+    parent="world"
+    xyz="0 0 0"
+    rpy="0 0 0"/>
 
-  <!-- Camera mount — bird's eye view above the table -->
-  <link name="camera_mount"/>
+  <!-- Camera mount — with minimal inertial for Gazebo -->
+  <link name="camera_mount">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+
   <joint name="camera_mount_joint" type="fixed">
     <parent link="world"/>
     <child link="camera_mount"/>
     <origin xyz="0.5 0.0 1.2" rpy="0.0 1.5708 0.0"/>
   </joint>
 
-  <!-- Camera optical frame -->
-  <link name="camera_color_optical_frame"/>
+  <!-- Camera optical frame — with minimal inertial for Gazebo -->
+  <link name="camera_color_optical_frame">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+
   <joint name="camera_optical_joint" type="fixed">
     <parent link="camera_mount"/>
     <child link="camera_color_optical_frame"/>
     <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
   </joint>
+
+  <!-- Gazebo ros2_control plugin -->
+  <gazebo>
+    <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
+      <parameters>$(find sorting_bringup)/config/ros2_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- Depth camera plugin -->
+  <gazebo reference="camera_color_optical_frame">
+    <sensor type="depth" name="depth_camera">
+      <always_on>true</always_on>
+      <update_rate>30</update_rate>
+      <camera>
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>10.0</far>
+        </clip>
+      </camera>
+      <plugin name="depth_camera_plugin" filename="libgazebo_ros_camera.so">
+        <ros>
+          <remapping>~/image_raw:=/camera/color/image_raw</remapping>
+          <remapping>~/depth/image_raw:=/camera/depth/image_rect_raw</remapping>
+          <remapping>~/camera_info:=/camera/color/camera_info</remapping>
+        </ros>
+        <frame_name>camera_color_optical_frame</frame_name>
+        <min_depth>0.1</min_depth>
+        <max_depth>10.0</max_depth>
+      </plugin>
+    </sensor>
+  </gazebo>
 
 </robot>

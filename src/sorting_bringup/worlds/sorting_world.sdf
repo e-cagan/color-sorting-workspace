@@ -20,6 +20,7 @@
     <!-- Table -->
     <model name="table">
       <static>true</static>
+      <pose>0.5 0.0 -0.01 0 0 0</pose>  ← buraya taşı
       <link name="table_link">
         <collision name="table_collision">
           <geometry>
@@ -35,7 +36,6 @@
             <diffuse>0.6 0.4 0.2 1</diffuse>
           </material>
         </visual>
-        <pose>0.5 0.0 -0.01 0 0 0</pose>
       </link>
     </model>
 

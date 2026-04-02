@@ -3,7 +3,10 @@ Module for simulation launch file.
 """
 
 import os
+import subprocess
 from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
@@ -11,17 +14,23 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 def generate_launch_description():
     """
-    Function that generates launch description.
+    Launches Gazebo simulation with Panda robot, MoveIt2, and RViz.
+    robot_description is processed via xacro subprocess to preserve
+    ros2_control tags that MoveItConfigsBuilder would otherwise strip.
     """
 
-    # MoveIt2 config — panda_with_camera.urdf.xacro'muzu override olarak veriyoruz
     bringup_dir = get_package_share_directory('sorting_bringup')
+    gazebo_ros_dir = get_package_share_directory('gazebo_ros')
 
+    # Process URDF via xacro directly — preserves ros2_control tags
+    xacro_file = os.path.join(bringup_dir, 'urdf', 'panda_with_camera.urdf.xacro')
+    urdf_str = subprocess.check_output(['xacro', xacro_file]).decode('utf-8')
+
+    # MoveIt2 config — uses same URDF for planning/kinematics
     moveit_config = (
         MoveItConfigsBuilder("moveit_resources_panda")
         .robot_description(
-            file_path=os.path.join(bringup_dir, 'urdf', 'panda_with_camera.urdf.xacro'),
-            mappings={"ros2_control_hardware_type": "mock_components"},
+            file_path=xacro_file,
         )
         .robot_description_semantic(
             file_path=os.path.join(bringup_dir, 'config', 'panda.srdf')
@@ -31,25 +40,52 @@ def generate_launch_description():
         .to_moveit_configs()
     )
 
-    # move_group — MoveIt2 action server
+    # Gazebo server only — gzclient skipped to avoid GPU/memory crashes
+    gzserver = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(gazebo_ros_dir, 'launch', 'gazebo.launch.py')
+        ),
+        launch_arguments={
+            'world': os.path.join(bringup_dir, 'worlds', 'sorting_world.sdf'),
+            'verbose': 'false',
+        }.items(),
+    )
+
+    # Spawn robot into Gazebo from robot_description topic
+    spawn_robot = Node(
+        package='gazebo_ros',
+        executable='spawn_entity.py',
+        arguments=['-topic', 'robot_description', '-entity', 'panda'],
+        output='screen',
+    )
+
+    # Robot state publisher — full URDF with ros2_control tags intact
+    robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        output='both',
+        parameters=[{'robot_description': urdf_str}],
+    )
+
+    # MoveIt2 move_group action server
     move_group_node = Node(
-        package="moveit_ros_move_group",
-        executable="move_group",
-        output="screen",
+        package='moveit_ros_move_group',
+        executable='move_group',
+        output='screen',
         parameters=[moveit_config.to_dict()],
     )
 
-    # RViz
+    # RViz with MoveIt2 config
     rviz_config = os.path.join(
-        get_package_share_directory("moveit_resources_panda_moveit_config"),
-        "launch", "moveit.rviz"
+        get_package_share_directory('moveit_resources_panda_moveit_config'),
+        'launch', 'moveit.rviz'
     )
     rviz_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
-        output="log",
-        arguments=["-d", rviz_config],
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='log',
+        arguments=['-d', rviz_config],
         parameters=[
             moveit_config.robot_description,
             moveit_config.robot_description_semantic,
@@ -58,71 +94,29 @@ def generate_launch_description():
         ],
     )
 
-    # Robot base → world static TF
-    static_tf_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="static_transform_publisher",
-        arguments=["0.0", "0.0", "0.0", "0.0", "0.0", "0.0", "world", "panda_link0"],
-    )
-
-    # Camera mount → world static TF
-    # xyz: 1.2m above table, in front of the robot
-    # rpy: 90 degrees slope (looking down)
-    camera_tf_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="camera_static_transform_publisher",
-        arguments=["0.5", "0.0", "1.2", "0.0", "1.5708", "0.0", "world", "camera_color_optical_frame"],
-    )
-
-    # Robot state publisher
-    robot_state_publisher = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
-        output="both",
-        parameters=[moveit_config.robot_description],
-    )
-
-    # ros2_control
-    ros2_controllers_path = os.path.join(
-        get_package_share_directory("moveit_resources_panda_moveit_config"),
-        "config", "ros2_controllers.yaml",
-    )
-    ros2_control_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[ros2_controllers_path],
-        remappings=[("/controller_manager/robot_description", "/robot_description")],
-        output="screen",
-    )
-
+    # Controller spawners — connect to Gazebo's controller manager
     joint_state_broadcaster_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
+        package='controller_manager',
+        executable='spawner',
+        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
     )
-
     panda_arm_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["panda_arm_controller", "-c", "/controller_manager"],
+        package='controller_manager',
+        executable='spawner',
+        arguments=['panda_arm_controller', '-c', '/controller_manager'],
     )
-
     panda_hand_controller_spawner = Node(
-        package="controller_manager",
-        executable="spawner",
-        arguments=["panda_hand_controller", "-c", "/controller_manager"],
+        package='controller_manager',
+        executable='spawner',
+        arguments=['panda_hand_controller', '-c', '/controller_manager'],
     )
 
     return LaunchDescription([
-        # We don't need transform (tf) nodes because it's now defined in xacro file
-        # static_tf_node,
-        # camera_tf_node,
+        gzserver,
         robot_state_publisher,
+        spawn_robot,
         move_group_node,
         rviz_node,
-        ros2_control_node,
         joint_state_broadcaster_spawner,
         panda_arm_controller_spawner,
         panda_hand_controller_spawner,
