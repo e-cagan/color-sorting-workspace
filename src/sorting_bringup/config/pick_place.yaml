@@ -1,5 +1,6 @@
 pick_place_node:
   ros__parameters:
+    use_sim_time: true
     planning_group: 'panda_arm'
     end_effector_frame: 'panda_hand'
     grasp_offset: 0.12

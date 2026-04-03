@@ -1,5 +1,6 @@
 color_detector_node:
   ros__parameters:
+    use_sim_time: true
     rgb_topic: '/depth_camera/image_raw'
     depth_topic: '/depth_camera/depth/image_raw'
     camera_info_topic: '/depth_camera/camera_info'

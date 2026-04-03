@@ -5,6 +5,7 @@ Module for sorting launch file.
 import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import TimerAction
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -34,6 +35,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        color_detector_node,
-        pick_place_node,
+        TimerAction(period=5.0, actions=[color_detector_node]),
+        TimerAction(period=5.0, actions=[pick_place_node]),
     ])

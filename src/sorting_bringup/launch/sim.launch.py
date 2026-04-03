@@ -64,7 +64,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='both',
-        parameters=[{'robot_description': urdf_str}],
+        parameters=[{'robot_description': urdf_str, 'use_sim_time': True}],
     )
 
     # MoveIt2 move_group action server
@@ -72,7 +72,7 @@ def generate_launch_description():
         package='moveit_ros_move_group',
         executable='move_group',
         output='screen',
-        parameters=[moveit_config.to_dict()],
+        parameters=[moveit_config.to_dict(), {'use_sim_time': True}],
     )
 
     # RViz with MoveIt2 config
@@ -91,6 +91,7 @@ def generate_launch_description():
             moveit_config.robot_description_semantic,
             moveit_config.planning_pipelines,
             moveit_config.robot_description_kinematics,
+            {'use_sim_time': True},
         ],
     )
 

@@ -3,15 +3,16 @@ Module for pick and place node.
 """
 
 import copy
-import asyncio
-from pymoveit2 import MoveIt2
+import time
+from pymoveit2 import MoveIt2, MoveIt2State
 from pymoveit2.robots import panda as panda_robot
 
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, ActionClient
+from rclpy.action.server import GoalResponse
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
 from control_msgs.action import GripperCommand
 from sorting_interfaces.msg import DetectedObject
@@ -28,7 +29,7 @@ class PickPlaceNode(Node):
         super().__init__('pick_place_node')
 
         # Callback group
-        self.callback_group = ReentrantCallbackGroup()
+        self.callback_group = MutuallyExclusiveCallbackGroup()
 
         # Parameters
         self.declare_parameter('planning_group', 'panda_arm')
@@ -68,6 +69,7 @@ class PickPlaceNode(Node):
             action_name='sort_objects',
             execute_callback=self.execute_callback,
             callback_group=self.callback_group,
+            goal_callback=lambda goal: GoalResponse.ACCEPT,
         )
 
         self.get_logger().info("Color detector node started.")
@@ -115,6 +117,7 @@ class PickPlaceNode(Node):
             execute_via_moveit=True,
         )
         self.arm.executor = executor
+        self.get_logger().info("Arm initialized.")
 
 
     def publish_feedback(self, goal_handle, status_msg: str) -> None:
@@ -137,16 +140,15 @@ class PickPlaceNode(Node):
         pre_grasp_pose.position.z += self.grasp_offset
 
         # Open the gripper before approaching (0.04 m = fully open for Panda)
-        await self.move_gripper(0.04)   # Open gripper before approaching
-        await asyncio.sleep(0)
+        await self.move_gripper(0.04)   # Open gripper before approaching 
 
         # Move the arm above the object
         self.arm.move_to_pose(
             position=[pre_grasp_pose.position.x, pre_grasp_pose.position.y, pre_grasp_pose.position.z],
             quat_xyzw=[0.0, 0.0, 0.0, 1.0]
         )
-        self.arm.wait_until_executed()
-        await asyncio.sleep(0)
+        while not self.arm.query_state() == MoveIt2State.IDLE:
+            time.sleep(0.1)        
 
 
     async def grasp(self, object_pose: Pose) -> None:
@@ -163,13 +165,13 @@ class PickPlaceNode(Node):
             position=[grasp_pose.position.x, grasp_pose.position.y, grasp_pose.position.z],
             quat_xyzw=[0.0, 0.0, 0.0, 1.0]
         )
-        self.arm.wait_until_executed()
-        await asyncio.sleep(0)
+        while not self.arm.query_state() == MoveIt2State.IDLE:
+            time.sleep(0.1)
+        
 
         # Close the fingers around the object
         # Not fully closed (0.0) to avoid crushing the object and destabilizing planning
         await self.move_gripper(0.01)   # Close gripper around object
-        await asyncio.sleep(0)
 
         # TODO: Add an Attach collision object call here to prevent the object
         # from slipping during transport in simulation
@@ -187,8 +189,8 @@ class PickPlaceNode(Node):
             position=[post_grasp_pose.position.x, post_grasp_pose.position.y, post_grasp_pose.position.z],
             quat_xyzw=[0.0, 0.0, 0.0, 1.0]
         )
-        self.arm.wait_until_executed()
-        await asyncio.sleep(0)
+        while not self.arm.query_state() == MoveIt2State.IDLE:
+            time.sleep(0.1)       
 
 
     async def pre_place(self, bin_pose: Pose) -> None:
@@ -203,8 +205,8 @@ class PickPlaceNode(Node):
             position=[pre_place_pose.position.x, pre_place_pose.position.y, pre_place_pose.position.z],
             quat_xyzw=[0.0, 0.0, 0.0, 1.0]
         )
-        self.arm.wait_until_executed()
-        await asyncio.sleep(0)
+        while not self.arm.query_state() == MoveIt2State.IDLE:
+            time.sleep(0.1)       
 
 
     async def place(self, bin_pose: Pose) -> None:
@@ -219,12 +221,11 @@ class PickPlaceNode(Node):
             position=[place_pose.position.x, place_pose.position.y, place_pose.position.z],
             quat_xyzw=[0.0, 0.0, 0.0, 1.0]
         )
-        self.arm.wait_until_executed()
-        await asyncio.sleep(0)
-
+        while not self.arm.query_state() == MoveIt2State.IDLE:
+            time.sleep(0.1)
+        
         # Open the gripper fully to drop the object into the bin
-        await self.move_gripper(0.04)   # Open gripper
-        await asyncio.sleep(0)
+        await self.move_gripper(0.04)   # Open gripper        
 
         # TODO: Add a Detach collision object call here
 
@@ -241,8 +242,8 @@ class PickPlaceNode(Node):
             position=[retreat_pose.position.x, retreat_pose.position.y, retreat_pose.position.z],
             quat_xyzw=[0.0, 0.0, 0.0, 1.0]
         )
-        self.arm.wait_until_executed()
-        await asyncio.sleep(0)
+        while not self.arm.query_state() == MoveIt2State.IDLE:
+            time.sleep(0.1) 
 
     
     async def move_gripper(self, position: float) -> None:

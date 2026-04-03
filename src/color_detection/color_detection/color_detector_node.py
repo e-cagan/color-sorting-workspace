@@ -70,7 +70,7 @@ class ColorDetectorNode(Node):
         self.cam_info_sub = self.create_subscription(CameraInfo, self.camera_info_topic, self.cam_info_callback, 10)
 
         # Syncronize the subscribers to avoid conflicts and register the callback
-        self.ts = ApproximateTimeSynchronizer(fs=[self.rgb_sub, self.depth_sub], queue_size=10, slop=0.1)
+        self.ts = ApproximateTimeSynchronizer(fs=[self.rgb_sub, self.depth_sub], queue_size=10, slop=2.0)
         self.ts.registerCallback(cb=self.image_callback)
 
         # Other variables
@@ -78,6 +78,8 @@ class ColorDetectorNode(Node):
         self.cv_bridge = CvBridge()
         self.tf_buffer = Buffer()
         self.tf_transforms = TransformListener(buffer=self.tf_buffer, node=self)
+        self.last_goal_time = self.get_clock().now()
+        self.goal_cooldown_sec = 30.0
         self.cam_matrix = None
         self.dist_coeffs = None
 
@@ -95,6 +97,7 @@ class ColorDetectorNode(Node):
         # Convert cam matrix to 3x3 array
         self.cam_matrix = np.array(msg.k).reshape(3, 3)
         self.dist_coeffs = np.array(msg.d)
+        self.get_logger().info("Camera info received!")
 
     
     # Send goal function
@@ -172,7 +175,7 @@ class ColorDetectorNode(Node):
         """
         A callback that processes image and determines the detection.
         """
-
+        self.get_logger().info("Image callback triggered!")
         # Check the camera matrix, distortion coefficients exists
         if self.cam_matrix is None:
             return
@@ -213,6 +216,13 @@ class ColorDetectorNode(Node):
             debug_msg.position = position
             debug_msg.confidence = confidence
             self.det_obj_pub.publish(debug_msg)
+
+            # Add cooldown
+            now = self.get_clock().now()
+            elapsed = (now - self.last_goal_time).nanoseconds / 1e9
+            if elapsed < self.goal_cooldown_sec:
+                continue
+            self.last_goal_time = now
 
             # Send goal to action
             self.send_goal(color_label=color, object_pose=position)
