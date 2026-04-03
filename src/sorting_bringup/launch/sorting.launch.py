@@ -35,6 +35,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        TimerAction(period=5.0, actions=[color_detector_node]),
-        TimerAction(period=5.0, actions=[pick_place_node]),
+        TimerAction(period=30.0, actions=[color_detector_node]),
+        TimerAction(period=30.0, actions=[pick_place_node]),
     ])

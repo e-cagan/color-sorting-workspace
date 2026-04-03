@@ -191,11 +191,13 @@ class ColorDetectorNode(Node):
 
         # Take the detections
         hsv_detections = self.detect_color(hsv_frame)
+        self.get_logger().info(f"Detections: {len(hsv_detections)}")
 
         # Iterate trough detections
         for color, centroid_2d, confidence in hsv_detections:
             # Take the position of detection and check if it's none
             position = self.get_3d_position(centroid_2d=centroid_2d, depth_frame=depth_frame)
+            self.get_logger().info(f"Color: {color}, pos: {position}, conf: {confidence:.2f}")
             if position is None:
                 continue
 
@@ -206,9 +208,8 @@ class ColorDetectorNode(Node):
             # Check the detection is duplicate
             if self.is_duplicate(position=position):
                 continue
-            self.tracked_positions.append(position)
 
-            # Publish DetectedObject message for debug before sending goal
+            # Publish DetectedObject message for debug
             debug_msg = DetectedObject()
             debug_msg.header.stamp = self.get_clock().now().to_msg()
             debug_msg.header.frame_id = 'base_link'
@@ -217,15 +218,17 @@ class ColorDetectorNode(Node):
             debug_msg.confidence = confidence
             self.det_obj_pub.publish(debug_msg)
 
-            # Add cooldown
+            # Cooldown check
             now = self.get_clock().now()
             elapsed = (now - self.last_goal_time).nanoseconds / 1e9
             if elapsed < self.goal_cooldown_sec:
                 continue
             self.last_goal_time = now
 
-            # Send goal to action
-            self.send_goal(color_label=color, object_pose=position)
+            # Send goal (only if it's successful then add tracked positions)
+            future = self.send_goal(color_label=color, object_pose=position)
+            if future is not None:
+                self.tracked_positions.append(position)
 
     
     # Color detection pipeline
@@ -313,29 +316,27 @@ class ColorDetectorNode(Node):
         A function which gets the 3D position of a point.
         """
 
-        # Take fx, fy, cx and cy from camera matrix and take u and v to calculate X and Y for transformations
         fx, fy = self.cam_matrix[0][0], self.cam_matrix[1][1]
         cx, cy = self.cam_matrix[0][2], self.cam_matrix[1][2]
         u, v = centroid_2d
 
-        # Calculate Z and scale Z. Also check if it's valid
-        Z = depth_frame[int(v), int(u)] * self.depth_scale
-        if Z <= 0 or np.isnan(Z):
+        # Gazebo depth sensor measures along camera frame +X axis
+        depth = depth_frame[int(v), int(u)] * self.depth_scale
+        if depth <= 0 or np.isnan(depth):
             return None
 
-        # Calculate X and Y
-        X = (u - cx) * Z / fx
-        Y = (v - cy) * Z / fy
+        # Camera looks along +X (Gazebo convention), not +Z (ROS convention)
+        X_cam = depth
+        Y_cam = (v - cy) * depth / fy
+        Z_cam = (u - cx) * depth / fx
 
-        # Create PointStamped message to conduct transformation between frames
         point_stamped = PointStamped()
         point_stamped.header.frame_id = self.camera_frame
         point_stamped.header.stamp = self.get_clock().now().to_msg()
-        point_stamped.point.x = X
-        point_stamped.point.y = Y
-        point_stamped.point.z = Z
+        point_stamped.point.x = X_cam
+        point_stamped.point.y = Y_cam
+        point_stamped.point.z = Z_cam
 
-        # Transform between frames
         try:
             transform = self.tf_buffer.lookup_transform(
                 target_frame=self.base_frame, source_frame=self.camera_frame,
